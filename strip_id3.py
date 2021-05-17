@@ -124,19 +124,11 @@ def main(args=None):
     )
     parser.add_argument(
         "input_file",
-        help=(
-            "The name of the file to strip the metadata from. "
-            "Use - to read from standard input (stdin)."
-        ),
+        help="The name of the file to strip the metadata from. ",
     )
     parser.add_argument(
         "output_file",
-        help=(
-            "The name of the file to which the data will be written.\n"
-            "Use - to write to standard output (stdout).\n"
-            "If you do not specify this, the output file will default "
-            'to the input_file prefixed with "[STRIPPED]".'
-        ),
+        help="The name of the file to which the data will be written.",
         nargs="?",
         default=None,
     )
