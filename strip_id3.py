@@ -78,9 +78,10 @@ def get_id3v2_info(fp: BinaryIO):
 def strip_id3v2(
     in_fp: BinaryIO, id3v2_info, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFER_SIZE
 ):
-    if id3v2_info.major_version != 3:
+    if id3v2_info.major_version not in SUPPORTED_VERSIONS:
+        versions = "/".join(str(i) for i in SUPPORTED_VERSIONS)
         raise ValueError(
-            "Only ID3v2.3.0 tags are currently supported "
+            f"Only ID3v2.[{versions}].0 tags are currently supported "
             f"(got ID3v2.{id3v2_info.major_version}.{id3v2_info.revision}"
         )
     if any(
@@ -130,4 +131,4 @@ if __name__ == "__main__":
     import sys
 
     bytes_written = main(sys.argv)
-    logging.info(f"{bytes_written} bytes written")
+    logging.debug(f"{bytes_written} bytes written")
