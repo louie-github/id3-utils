@@ -36,7 +36,7 @@ ID3v2Header = namedtuple(
     ],
 )
 
-# This script can only remove ID3v2.3.0 files.
+# This script can currently only remove ID3v2.3.0 tags.
 SUPPORTED_VERSIONS = [3]
 
 
@@ -49,15 +49,36 @@ def get_id3v2_info(data: bytes):
         raise ValueError("File does not contain an ID3v2 header.")
 
     major_version, revision = fp.read(ID3v2_VERSION_LENGTH)
+    # "Version and revision will never be $FF."
     if major_version == 255 or revision == 255:
         raise ValueError("Encountered an invalid ID3v2 version.")
 
     flags = fp.read(ID3v2_FLAGS_LENGTH)
-    flags_bitstring = bin(flags[0])[2:].zfill(8)[:3]
-
+    # bin the inner integer, then remove the '0b' prefix, then zfill
+    flags_bitstring = bin(flags[0])[2:].zfill(8)
     assert all(s == "0" or s == "1" for s in flags_bitstring)
+
+    other_flags = [
+        7 - indx for indx, val in enumerate(flags_bitstring[3:]) if val == "1"
+    ]
+    if other_flags:
+        logging.warning(
+            "Some ID3v2 flags in the ID3v2 header were not cleared "
+            f"(set to 0). Bits {repr(other_flags)} were set to 1."
+        )
+        logging.warning(
+            "The ID3v2 tag data might not be readable to ordinary "
+            "parsers, or might not conform to the relevant ID3v2 "
+            "standard. The program recommends that you manually check "
+            "the ID3v2 tags in the file using an external application "
+            "(especially if said ID3v2 data is specific to that "
+            "application) to make sure that you do not lose any "
+            "important data."
+        )
+        logging.warning("The program will attempt to continue normally.")
+
     unsynchronisation, extended_header, experimental = (
-        bool(int(i)) for i in flags_bitstring
+        bool(int(i)) for i in flags_bitstring[:3]
     )
 
     # "The ID3v2 tag size is the size of the complete tag after
@@ -89,8 +110,8 @@ def strip_id3v2(
     id3v2_header = in_fp.read(ID3v2_HEADER_LENGTH)
     id3v2_info = get_id3v2_info(id3v2_header)
     logging.info(
-        f"Found an ID3v2 header (version 2.{id3v2_info.major_version}."
-        f"{id3v2_info.revision})."
+        f"Found and read a complete ID3v2 header (version 2."
+        f"{id3v2_info.major_version}.{id3v2_info.revision})."
     )
     logging.debug(f"ID3v2 header information: {repr(id3v2_info)}")
     if id3v2_info.major_version not in SUPPORTED_VERSIONS:
@@ -166,6 +187,33 @@ def main(args=None):
     else:
         output_path = Path(output_path)
     logging.info(f"Output file: {output_path}")
+    if output_path.exists():
+        if parsed_args.overwrite:
+            logging.info(
+                f"Overwriting output file {repr(output_path)} without"
+                "user confirmation (--overwrite was specified)."
+            )
+        else:
+            print(f"Output file already exists: {output_path}")
+            user_input = (
+                input("Do you wish to overwrite the file? Y/[N]: ").strip().upper()
+            )
+            is_valid_input = user_input in "YN"
+            while not is_valid_input:
+                user_input = (
+                    input("Invalid input. Do you wish to overwrite the file? Y/[N]: ")
+                    .strip()
+                    .upper()
+                )
+                is_valid_input = user_input in "YN"
+            if user_input == "Y":
+                logging.info(
+                    f"Overwriting output file {repr(output_path)} "
+                    "after user confirmation."
+                )
+            else:
+                logging.info("Not overwriting output file, exiting.")
+                raise SystemExit
 
     with open(input_path, "rb") as in_f:
         with open(output_path, "wb") as out_f:
