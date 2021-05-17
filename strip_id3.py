@@ -146,9 +146,13 @@ def main(args=None):
         parsed_args = parser.parse_args()
 
     if parsed_args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(
+            level=logging.DEBUG, format="[{levelname}] {message}", style="{"
+        )
     else:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(
+            level=logging.INFO, format="[{levelname}] {message}", style="{"
+        )
 
     input_path = Path(parsed_args.input_file)
     logging.info(f"Input file: {input_path}")
