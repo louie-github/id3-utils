@@ -14,8 +14,15 @@ from typing import BinaryIO
 # https://id3.org/id3v2.3.0
 ID3v2_IDENTIFIER = b"ID3"
 ID3v2_VERSION_LENGTH = 2
-IDv3_FLAGS_LENGTH = 1
-IDv3_SIZE_LENGTH = 4
+ID3v2_FLAGS_LENGTH = 1
+ID3v2_SIZE_LENGTH = 4
+ID3v2_HEADER_LENGTH = (
+    len(ID3v2_IDENTIFIER)
+    + ID3v2_VERSION_LENGTH
+    + ID3v2_FLAGS_LENGTH
+    + ID3v2_SIZE_LENGTH
+)
+assert ID3v2_HEADER_LENGTH == 10
 
 ID3v2Header = namedtuple(
     "ID3v2Header",
@@ -33,7 +40,8 @@ ID3v2Header = namedtuple(
 SUPPORTED_VERSIONS = [3]
 
 
-def get_id3v2_info(fp: BinaryIO):
+def get_id3v2_info(data: bytes):
+    fp = io.BytesIO(data)
     fp.seek(0)
 
     identifier = fp.read(len(ID3v2_IDENTIFIER))
@@ -44,7 +52,7 @@ def get_id3v2_info(fp: BinaryIO):
     if major_version == 255 or revision == 255:
         raise ValueError("Encountered an invalid ID3v2 version.")
 
-    flags = fp.read(IDv3_FLAGS_LENGTH)
+    flags = fp.read(ID3v2_FLAGS_LENGTH)
     flags_bitstring = bin(flags[0])[2:].zfill(8)[:3]
 
     assert all(s == "0" or s == "1" for s in flags_bitstring)
@@ -56,7 +64,7 @@ def get_id3v2_info(fp: BinaryIO):
     # unsychronisation, including padding, excluding the header but not
     # excluding the extended header (total tag size - 10)."
     tag_size = 0
-    for byte in fp.read(IDv3_SIZE_LENGTH):
+    for byte in fp.read(ID3v2_SIZE_LENGTH):
         # Most significant bit must be 0 (each byte < $80 or 128)
         if byte > 128:
             raise ValueError("Encountered an invalid ID3v2 size.")
@@ -76,8 +84,15 @@ def get_id3v2_info(fp: BinaryIO):
 
 
 def strip_id3v2(
-    in_fp: BinaryIO, id3v2_info, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFER_SIZE
+    in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFER_SIZE
 ):
+    id3v2_header = in_fp.read(ID3v2_HEADER_LENGTH)
+    id3v2_info = get_id3v2_info(id3v2_header)
+    logging.info(
+        f"Found an ID3v2 header (version 2.{id3v2_info.major_version}."
+        f"{id3v2_info.revision})."
+    )
+    logging.debug(f"ID3v2 header information: {repr(id3v2_info)}")
     if id3v2_info.major_version not in SUPPORTED_VERSIONS:
         versions = "/".join(str(i) for i in SUPPORTED_VERSIONS)
         raise ValueError(
@@ -85,7 +100,10 @@ def strip_id3v2(
             f"(got ID3v2.{id3v2_info.major_version}.{id3v2_info.revision}"
         )
     # Skip ahead of the ID3v2 data according to tag_size
-    logging.debug(f"Reading the file starting at offset {id3v2_info.tag_size} bytes.")
+    logging.debug(
+        "Reading input file and writing to output file starting at "
+        f"offset {id3v2_info.tag_size + ID3v2_HEADER_LENGTH} bytes."
+    )
     in_fp.seek(id3v2_info.tag_size, 1)
     # Start writing to output file
     buffer = in_fp.read(bufsize)
@@ -151,13 +169,7 @@ def main(args=None):
 
     with open(input_path, "rb") as in_f:
         with open(output_path, "wb") as out_f:
-            id3v2_info = get_id3v2_info(in_f)
-            logging.debug(f"Read ID3v2 header: {repr(id3v2_info)}")
-            logging.info(
-                "Found an ID3v2 header (version 2."
-                f"{id3v2_info.major_version}.{id3v2_info.revision})."
-            )
-            bytes_written = strip_id3v2(in_f, id3v2_info, out_f)
+            bytes_written = strip_id3v2(in_f, out_f)
     return bytes_written
 
 
