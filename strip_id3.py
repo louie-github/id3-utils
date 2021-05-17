@@ -3,13 +3,14 @@
 
 import argparse
 import io
+import itertools
 import logging
 
 from collections import namedtuple
 from pathlib import Path
 from typing import BinaryIO
 
-# TODO: Add support for ID3v1 tags.
+ID3v1_IDENTIFIER = b"TAG"
 
 # Based on the informal standard for ID3v2.3.0 found at:
 # https://id3.org/id3v2.3.0
@@ -48,6 +49,7 @@ def get_id3v2_info(data: bytes):
 
     identifier = fp.read(len(ID3v2_IDENTIFIER))
     if identifier != ID3v2_IDENTIFIER:
+        # TODO: Do not error out
         raise ValueError("File does not contain an ID3v2 header.")
 
     major_version, revision = fp.read(ID3v2_VERSION_LENGTH)
@@ -122,18 +124,49 @@ def strip_id3v2(
             f"Only ID3v2.[{versions}].0 tags are currently supported "
             f"(got ID3v2.{id3v2_info.major_version}.{id3v2_info.revision}"
         )
-    # Skip ahead of the ID3v2 data according to tag_size
-    logging.debug(
-        "Reading input file and writing to output file starting at "
-        f"offset {id3v2_info.tag_size + ID3v2_HEADER_LENGTH} bytes."
-    )
+
     in_fp.seek(id3v2_info.tag_size, 1)
-    # Start writing to output file
-    buffer = in_fp.read(bufsize)
-    bytes_written = 0
-    while buffer:
-        bytes_written += out_fp.write(buffer)
+    start_offset = in_fp.tell()
+    assert start_offset == (id3v2_info.tag_size + ID3v2_HEADER_LENGTH)
+
+    # Check for ID3v1 tag data
+    in_fp.seek(-128, 2)
+    end_offset = in_fp.tell()
+    id3v1_identifier = in_fp.read(3)
+    if not id3v1_identifier == ID3v1_IDENTIFIER:
+        logging.info("Did not find any ID3v1 tag data.")
+        logging.debug(
+            "Reading input file and writing to output file starting at "
+            f"offset {start_offset} bytes until the end of the file."
+        )
+        # Write from start_offset until end of file
+        in_fp.seek(start_offset)
         buffer = in_fp.read(bufsize)
+        bytes_written = 0
+        while buffer:
+            bytes_written += out_fp.write(buffer)
+            buffer = in_fp.read(bufsize)
+    else:
+        logging.info("Found ID3v1 tag data.")
+        logging.debug(
+            "Reading input file and writing to output file starting at "
+            f"offset {start_offset} bytes until {end_offset} bytes."
+        )
+        # Write from start_offset until end_offset
+        in_fp.seek(start_offset)
+        bytes_to_write = end_offset - start_offset
+        if bufsize > bytes_to_write:
+            bytes_written = out_fp.write(in_fp.read(bytes_to_write))
+            assert bytes_written == bytes_to_write
+            return bytes_written
+        buffer_cycles, last_bufsize = divmod(bytes_to_write, bufsize)
+        cycles = 0
+        bytes_written = 0
+        while cycles < buffer_cycles:
+            bytes_written += out_fp.write(in_fp.read(bufsize))
+            cycles += 1
+        else:
+            bytes_written += out_fp.write(in_fp.read(last_bufsize))
     return bytes_written
 
 
