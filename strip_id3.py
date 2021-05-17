@@ -235,7 +235,7 @@ def main(args=None):
                     "after user confirmation."
                 )
             else:
-                logging.info("Not overwriting output file, exiting.")
+                logging.error("Not overwriting output file, exiting.")
                 raise SystemExit
 
     with open(input_path, "rb") as in_f:
