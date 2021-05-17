@@ -84,16 +84,6 @@ def strip_id3v2(
             f"Only ID3v2.[{versions}].0 tags are currently supported "
             f"(got ID3v2.{id3v2_info.major_version}.{id3v2_info.revision}"
         )
-    if any(
-        [
-            id3v2_info.unsynchronisation,
-            id3v2_info.extended_header,
-            id3v2_info.experimental,
-        ]
-    ):
-        raise ValueError(
-            "Only blank ID3v2 flags (no flags set) are currently supported."
-        )
     # Skip ahead of the ID3v2 data according to tag_size
     logging.debug(f"Reading the file starting at offset {id3v2_info.tag_size} bytes.")
     in_fp.seek(id3v2_info.tag_size, 1)
