@@ -3,7 +3,6 @@
 
 import argparse
 import io
-import itertools
 import logging
 
 from collections import namedtuple
@@ -43,19 +42,25 @@ ID3v2Header = namedtuple(
 SUPPORTED_VERSIONS = [3]
 
 
+class ID3v2HeaderError(ValueError):
+    """A class to help differentiate ID3v2 header parsing errors from
+    regular ValueErrors."""
+
+    pass
+
+
 def get_id3v2_info(data: bytes):
     fp = io.BytesIO(data)
     fp.seek(0)
 
     identifier = fp.read(len(ID3v2_IDENTIFIER))
     if identifier != ID3v2_IDENTIFIER:
-        # TODO: Do not error out
-        raise ValueError("File does not contain an ID3v2 header.")
+        raise ID3v2HeaderError("File does not contain an ID3v2 header.")
 
     major_version, revision = fp.read(ID3v2_VERSION_LENGTH)
     # "Version and revision will never be $FF."
     if major_version == 255 or revision == 255:
-        raise ValueError("Encountered an invalid ID3v2 version.")
+        raise ID3v2HeaderError("Encountered an invalid ID3v2 version.")
 
     flags = fp.read(ID3v2_FLAGS_LENGTH)
     # bin the inner integer, then remove the '0b' prefix, then zfill
@@ -92,7 +97,7 @@ def get_id3v2_info(data: bytes):
     for byte in fp.read(ID3v2_SIZE_LENGTH):
         # Most significant bit must be 0 (each byte < $80 or 128)
         if byte > 128:
-            raise ValueError("Encountered an invalid ID3v2 size.")
+            raise ID3v2HeaderError("Encountered an invalid ID3v2 size.")
         tag_size += byte
         tag_size <<= 7
     # Account for final bit shift
@@ -112,42 +117,49 @@ def strip_id3v2(
     in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFER_SIZE
 ):
     id3v2_header = in_fp.read(ID3v2_HEADER_LENGTH)
-    id3v2_info = get_id3v2_info(id3v2_header)
-    logging.info(
-        f"Found and read a complete ID3v2 header (version 2."
-        f"{id3v2_info.major_version}.{id3v2_info.revision})."
-    )
-    logging.debug(f"ID3v2 header information: {repr(id3v2_info)}")
-    if id3v2_info.major_version not in SUPPORTED_VERSIONS:
-        versions = "/".join(str(i) for i in SUPPORTED_VERSIONS)
-        raise ValueError(
-            f"Only ID3v2.[{versions}].0 tags are currently supported "
-            f"(got ID3v2.{id3v2_info.major_version}.{id3v2_info.revision}"
-        )
+    try:
+        id3v2_info = get_id3v2_info(id3v2_header)
+    except ID3v2HeaderError as err:
+        has_id3v2 = False
+        logging.debug(f"Error when searching for ID3v2 header: {err}")
+    else:
+        has_id3v2 = True
 
-    in_fp.seek(id3v2_info.tag_size, 1)
-    start_offset = in_fp.tell()
-    assert start_offset == (id3v2_info.tag_size + ID3v2_HEADER_LENGTH)
+    if has_id3v2:
+        logging.info(
+            f"Found and read a complete ID3v2 header (version 2."
+            f"{id3v2_info.major_version}.{id3v2_info.revision})."
+        )
+        logging.debug(f"ID3v2 header information: {repr(id3v2_info)}")
+        if id3v2_info.major_version not in SUPPORTED_VERSIONS:
+            versions = "/".join(str(i) for i in SUPPORTED_VERSIONS)
+            raise ValueError(
+                f"Only ID3v2.[{versions}].0 tags are currently supported "
+                f"(got ID3v2.{id3v2_info.major_version}.{id3v2_info.revision}"
+            )
+        in_fp.seek(id3v2_info.tag_size, 1)
+        start_offset = in_fp.tell()
+        assert start_offset == (id3v2_info.tag_size + ID3v2_HEADER_LENGTH)
+    else:
+        logging.info("Could not find a valid ID3v2 header.")
+        start_offset = 0
 
     # Check for ID3v1 tag data
     in_fp.seek(-128, 2)
     end_offset = in_fp.tell()
     id3v1_identifier = in_fp.read(3)
     if not id3v1_identifier == ID3v1_IDENTIFIER:
-        logging.info("Did not find any ID3v1 tag data.")
-        logging.debug(
-            "Reading input file and writing to output file starting at "
-            f"offset {start_offset} bytes until the end of the file."
-        )
-        # Write from start_offset until end of file
-        in_fp.seek(start_offset)
-        buffer = in_fp.read(bufsize)
-        bytes_written = 0
-        while buffer:
-            bytes_written += out_fp.write(buffer)
-            buffer = in_fp.read(bufsize)
+        logging.info("Could not find ID3v1 tag data.")
+        has_id3v1 = False
     else:
         logging.info("Found ID3v1 tag data.")
+        has_id3v1 = True
+
+    # TODO: Add option not to error out here.
+    if not (has_id3v1 or has_id3v2):
+        raise ValueError("File does not contain either ID3v1 or ID3v2 metadata.")
+
+    if has_id3v1:
         logging.debug(
             "Reading input file and writing to output file starting at "
             f"offset {start_offset} bytes until {end_offset} bytes."
@@ -167,6 +179,20 @@ def strip_id3v2(
             cycles += 1
         else:
             bytes_written += out_fp.write(in_fp.read(last_bufsize))
+    else:
+        logging.debug(
+            "Reading input file and writing to output file starting "
+            f"at offset {start_offset} bytes until the end of the "
+            "file."
+        )
+        # Write from start_offset until end of file
+        in_fp.seek(start_offset)
+        buffer = in_fp.read(bufsize)
+        bytes_written = 0
+        while buffer:
+            bytes_written += out_fp.write(buffer)
+            buffer = in_fp.read(bufsize)
+
     return bytes_written
 
 
@@ -254,7 +280,7 @@ def main(args=None):
     if output_path.exists():
         if parsed_args.overwrite:
             logging.info(
-                f"Overwriting output file {repr(output_path)} without"
+                f"Overwriting output file {repr(output_path)} without "
                 "user confirmation (--overwrite was specified)."
             )
         else:
