@@ -9,6 +9,7 @@ from collections import namedtuple
 from pathlib import Path
 from typing import BinaryIO
 
+# TODO: Add support for ID3v1 tags.
 
 # Based on the informal standard for ID3v2.3.0 found at:
 # https://id3.org/id3v2.3.0
@@ -37,6 +38,7 @@ ID3v2Header = namedtuple(
 )
 
 # This script can currently only remove ID3v2.3.0 tags.
+# I think the code can work with 2.4.0 too, but I'm not sure.
 SUPPORTED_VERSIONS = [3]
 
 
@@ -82,7 +84,7 @@ def get_id3v2_info(data: bytes):
     )
 
     # "The ID3v2 tag size is the size of the complete tag after
-    # unsychronisation, including padding, excluding the header but not
+    # unsynchronisation, including padding, excluding the header but not
     # excluding the extended header (total tag size - 10)."
     tag_size = 0
     for byte in fp.read(ID3v2_SIZE_LENGTH):
@@ -133,6 +135,35 @@ def strip_id3v2(
         bytes_written += out_fp.write(buffer)
         buffer = in_fp.read(bufsize)
     return bytes_written
+
+
+def _get_user_confirmation(message, default=False):
+    if default is True or (
+        isinstance(default, str) and default.strip().casefold() == "y"
+    ):
+        default = True
+        suffix = "[Y]/N:"
+    elif default is False or (
+        isinstance(default, str) and default.strip().casefold() == "n"
+    ):
+        default = False
+        suffix = "Y/[N]:"
+    else:
+        default = None
+        suffix = "Y/N:"
+    message = f"{message} {suffix} "
+    valid_inputs = {"y", "n", ""} if default is not None else {"y", "n"}
+    user_input = input(message).strip().casefold()
+    while user_input not in valid_inputs:
+        user_input = input(f"Invalid input. {message}").strip().casefold()
+
+    if user_input == "y":
+        ret = True
+    elif user_input == "n":
+        ret = False
+    else:
+        ret = default
+    return ret
 
 
 def main(args=None):
@@ -195,18 +226,10 @@ def main(args=None):
             )
         else:
             print(f"Output file already exists: {output_path}")
-            user_input = (
-                input("Do you wish to overwrite the file? Y/[N]: ").strip().upper()
+            user_confirmation = _get_user_confirmation(
+                "Do you wish to overwrite the file?", default=False
             )
-            is_valid_input = user_input in "YN"
-            while not is_valid_input:
-                user_input = (
-                    input("Invalid input. Do you wish to overwrite the file? Y/[N]: ")
-                    .strip()
-                    .upper()
-                )
-                is_valid_input = user_input in "YN"
-            if user_input == "Y":
+            if user_confirmation:
                 logging.info(
                     f"Overwriting output file {repr(output_path)} "
                     "after user confirmation."
