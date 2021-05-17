@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import argparse
 import io
 import logging
 
 from collections import namedtuple
+from pathlib import Path
 from typing import BinaryIO
 
-# Change this if necessary.
-logging.basicConfig(level=logging.DEBUG)
 
 # Based on the informal standard for ID3v2.3.0 found at:
 # https://id3.org/id3v2.3.0
@@ -95,6 +95,7 @@ def strip_id3v2(
             "Only blank ID3v2 flags (no flags set) are currently supported."
         )
     # Skip ahead of the ID3v2 data according to tag_size
+    logging.debug(f"Reading the file starting at offset {id3v2_info.tag_size} bytes.")
     in_fp.seek(id3v2_info.tag_size, 1)
     # Start writing to output file
     buffer = in_fp.read(bufsize)
@@ -105,30 +106,75 @@ def strip_id3v2(
     return bytes_written
 
 
-def main(args):
-    in_fname = args[1]
-    logging.debug(f"Input file: {in_fname}")
+def main(args=None):
+    parser = argparse.ArgumentParser(description="Strip ID3v2 metadata from a file.")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        help="Enable verbose output (useful for debugging)",
+        action="store_true",
+        dest="verbose",
+    )
+    parser.add_argument(
+        "-f",
+        "--overwrite",
+        help="Overwrite output files if they already exist.",
+        action="store_true",
+        dest="overwrite",
+    )
+    parser.add_argument(
+        "input_file",
+        help=(
+            "The name of the file to strip the metadata from. "
+            "Use - to read from standard input (stdin)."
+        ),
+    )
+    parser.add_argument(
+        "output_file",
+        help=(
+            "The name of the file to which the data will be written.\n"
+            "Use - to write to standard output (stdout).\n"
+            "If you do not specify this, the output file will default "
+            'to the input_file prefixed with "[STRIPPED]".'
+        ),
+        nargs="?",
+        default=None,
+    )
+    if args is not None:
+        parsed_args = parser.parse_args(args)
+    else:
+        parsed_args = parser.parse_args()
 
-    try:
-        out_fname = args[2]
-    except IndexError:
-        logging.warn(
-            "No output file was specified. Falling back by adding a "
+    if parsed_args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
+
+    input_path = Path(parsed_args.input_file)
+    logging.info(f"Input file: {input_path}")
+    output_path = parsed_args.output_file
+    if output_path is None:
+        logging.warning(
+            "No output file was specified. Falling back to adding a "
             "prefix to the input file."
         )
-        out_fname = f"[STRIPPED] {in_fname}"
-    logging.debug(f"Output file: {out_fname}")
+        output_path = input_path.parent / f"[STRIPPED] {input_path.name}"
+    else:
+        output_path = Path(output_path)
+    logging.info(f"Output file: {output_path}")
 
-    with open(in_fname, "rb") as in_f:
-        with open(out_fname, "wb") as out_f:
+    with open(input_path, "rb") as in_f:
+        with open(output_path, "wb") as out_f:
             id3v2_info = get_id3v2_info(in_f)
-            logging.info(f"Read ID3v2 header: {repr(id3v2_info)}")
-            output = strip_id3v2(in_f, id3v2_info, out_f)
-    return output
+            logging.debug(f"Read ID3v2 header: {repr(id3v2_info)}")
+            logging.info(
+                "Found an ID3v2 header (version 2."
+                f"{id3v2_info.major_version}.{id3v2_info.revision})."
+            )
+            bytes_written = strip_id3v2(in_f, id3v2_info, out_f)
+    return bytes_written
 
 
 if __name__ == "__main__":
-    import sys
-
-    bytes_written = main(sys.argv)
-    logging.debug(f"{bytes_written} bytes written")
+    bytes_written = main()
+    logging.info(f"Successfully wrote {bytes_written} bytes to output.")
