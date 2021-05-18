@@ -67,13 +67,11 @@ def get_id3v2_info(data: bytes):
     flags_bitstring = bin(flags[0])[2:].zfill(8)
     assert all(s == "0" or s == "1" for s in flags_bitstring)
 
-    other_flags = tuple(
-        7 - indx for indx, val in enumerate(flags_bitstring[3:]) if val == "1"
-    )
-    if other_flags:
+    other_flags = tuple(int(i) for i in flags_bitstring[3:])
+    if any(other_flags):
         logging.warning(
-            "Some ID3v2 flags in the ID3v2 header were not cleared "
-            f"(set to 0). Bits {repr(other_flags)} were set to 1."
+            "Some ID3v2 flags in the ID3v2 header are not cleared or "
+            f"set to 0 (Other flags: {other_flags})"
         )
         logging.warning(
             "The ID3v2 tag data might not be readable to ordinary "
