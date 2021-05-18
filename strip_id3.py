@@ -9,7 +9,9 @@ from collections import namedtuple
 from pathlib import Path
 from typing import BinaryIO
 
+# From: https://id3.org/ID3v1
 ID3v1_IDENTIFIER = b"TAG"
+ID3v1_LENGTH = 128
 
 # Based on the informal standard for ID3v2.3.0 found at:
 # https://id3.org/id3v2.3.0
@@ -113,9 +115,7 @@ def get_id3v2_info(data: bytes):
     )
 
 
-def strip_id3v2(
-    in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFER_SIZE
-):
+def strip_id3(in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFER_SIZE):
     id3v2_header = in_fp.read(ID3v2_HEADER_LENGTH)
     try:
         id3v2_info = get_id3v2_info(id3v2_header)
@@ -145,7 +145,7 @@ def strip_id3v2(
         start_offset = 0
 
     # Check for ID3v1 tag data
-    in_fp.seek(-128, 2)
+    in_fp.seek(-ID3v1_LENGTH, 2)
     end_offset = in_fp.tell()
     id3v1_identifier = in_fp.read(3)
     if not id3v1_identifier == ID3v1_IDENTIFIER:
@@ -167,10 +167,6 @@ def strip_id3v2(
         # Write from start_offset until end_offset
         in_fp.seek(start_offset)
         bytes_to_write = end_offset - start_offset
-        if bufsize > bytes_to_write:
-            bytes_written = out_fp.write(in_fp.read(bytes_to_write))
-            assert bytes_written == bytes_to_write
-            return bytes_written
         buffer_cycles, last_bufsize = divmod(bytes_to_write, bufsize)
         cycles = 0
         bytes_written = 0
@@ -265,41 +261,41 @@ def main(args=None):
             level=logging.INFO, format="[{levelname}] {message}", style="{"
         )
 
-    input_path = Path(parsed_args.input_file)
-    logging.info(f"Input file: {input_path}")
-    output_path = parsed_args.output_file
-    if output_path is None:
+    in_path = Path(parsed_args.input_file)
+    logging.info(f"Input file: {in_path}")
+    out_path = parsed_args.output_file
+    if out_path is None:
         logging.warning(
             "No output file was specified. Falling back to adding a "
             "prefix to the input file."
         )
-        output_path = input_path.parent / f"[STRIPPED] {input_path.name}"
+        out_path = in_path.parent / f"[STRIPPED] {in_path.name}"
     else:
-        output_path = Path(output_path)
-    logging.info(f"Output file: {output_path}")
-    if output_path.exists():
+        out_path = Path(out_path)
+    logging.info(f"Output file: {out_path}")
+    if out_path.exists():
         if parsed_args.overwrite:
             logging.info(
-                f"Overwriting output file {repr(output_path)} without "
-                "user confirmation (--overwrite was specified)."
+                f"Overwriting output file {repr(out_path)} without "
+                'user confirmation. ("--overwrite" was specified)'
             )
         else:
-            print(f"Output file already exists: {output_path}")
+            print(f"Output file already exists: {out_path}")
             user_confirmation = _get_user_confirmation(
-                "Do you wish to overwrite the file?", default=False
+                "Do you want to overwrite the file?", default=False
             )
             if user_confirmation:
                 logging.info(
-                    f"Overwriting output file {repr(output_path)} "
+                    f"Overwriting output file {repr(out_path)} "
                     "after user confirmation."
                 )
             else:
                 logging.error("Not overwriting output file, exiting.")
                 raise SystemExit
 
-    with open(input_path, "rb") as in_f:
-        with open(output_path, "wb") as out_f:
-            bytes_written = strip_id3v2(in_f, out_f)
+    with open(in_path, "rb") as in_f:
+        with open(out_path, "wb") as out_f:
+            bytes_written = strip_id3(in_f, out_f)
     return bytes_written
 
 
