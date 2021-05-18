@@ -49,7 +49,7 @@ class ID3v2HeaderError(ValueError):
     pass
 
 
-def get_id3v2_info(data: bytes):
+def read_id3v2_header(data: bytes):
     fp = io.BytesIO(data)
     fp.seek(0)
 
@@ -112,10 +112,19 @@ def get_id3v2_info(data: bytes):
     )
 
 
+def check_id3v1(fp: BinaryIO):
+    old_position = fp.tell()
+    fp.seek(-ID3v1_LENGTH, 2)
+    offset = fp.tell()
+    id3v1_identifier = fp.read(3)
+    fp.seek(old_position)
+    return (id3v1_identifier == ID3v1_IDENTIFIER, offset)
+
+
 def strip_id3(in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFER_SIZE):
     id3v2_header = in_fp.read(ID3v2_HEADER_LENGTH)
     try:
-        id3v2_info = get_id3v2_info(id3v2_header)
+        id3v2_info = read_id3v2_header(id3v2_header)
     except ID3v2HeaderError as err:
         has_id3v2 = False
         logging.debug(f"Error when searching for ID3v2 header: {err}")
@@ -141,16 +150,11 @@ def strip_id3(in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFE
         logging.info("Could not find a valid ID3v2 header.")
         start_offset = 0
 
-    # Check for ID3v1 tag data
-    in_fp.seek(-ID3v1_LENGTH, 2)
-    end_offset = in_fp.tell()
-    id3v1_identifier = in_fp.read(3)
-    if not id3v1_identifier == ID3v1_IDENTIFIER:
-        logging.info("Could not find ID3v1 tag data.")
-        has_id3v1 = False
-    else:
+    has_id3v1, end_offset = check_id3v1(in_fp)
+    if has_id3v1:
         logging.info("Found ID3v1 tag data.")
-        has_id3v1 = True
+    else:
+        logging.info("Could not find ID3v1 tag data.")
 
     # TODO: Add option not to error out here.
     if not (has_id3v1 or has_id3v2):
@@ -159,7 +163,7 @@ def strip_id3(in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFE
     if has_id3v1:
         logging.debug(
             "Reading input file and writing to output file starting at "
-            f"offset {start_offset} bytes until {end_offset} bytes."
+            f"offset {start_offset:_} bytes until {end_offset:_} bytes."
         )
         # Write from start_offset until end_offset
         in_fp.seek(start_offset)
@@ -288,7 +292,8 @@ def main(args=None):
                 )
             else:
                 logging.error("Not overwriting output file, exiting.")
-                raise SystemExit
+                # EX_CANTCREAT: can't create (user) output file
+                raise SystemExit(73)
 
     with open(in_path, "rb") as in_f:
         with open(out_path, "wb") as out_f:
@@ -298,4 +303,4 @@ def main(args=None):
 
 if __name__ == "__main__":
     bytes_written = main()
-    logging.info(f"Successfully wrote {bytes_written} bytes to output.")
+    logging.info(f"Successfully wrote {bytes_written:_} bytes to output.")
