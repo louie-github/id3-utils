@@ -5,9 +5,8 @@ import argparse
 import io
 import logging
 
-from collections import namedtuple
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, NamedTuple, Tuple
 
 # From: https://id3.org/ID3v1
 ID3v1_IDENTIFIER = b"TAG"
@@ -27,17 +26,16 @@ ID3v2_HEADER_LENGTH = (
 )
 assert ID3v2_HEADER_LENGTH == 10
 
-ID3v2Header = namedtuple(
-    "ID3v2Header",
-    [
-        "major_version",
-        "revision",
-        "unsynchronisation",
-        "extended_header",
-        "experimental",
-        "tag_size",
-    ],
-)
+
+class ID3v2Header(NamedTuple):
+    major_version: int
+    revision: int
+    unsynchronisation: bool
+    extended_header: bool
+    experimental: bool
+    other_flags: Tuple[int, ...]
+    tag_size: int
+
 
 # This script can currently only remove ID3v2.3.0 tags.
 # I think the code can work with 2.4.0 too, but I'm not sure.
@@ -69,9 +67,9 @@ def get_id3v2_info(data: bytes):
     flags_bitstring = bin(flags[0])[2:].zfill(8)
     assert all(s == "0" or s == "1" for s in flags_bitstring)
 
-    other_flags = [
+    other_flags = tuple(
         7 - indx for indx, val in enumerate(flags_bitstring[3:]) if val == "1"
-    ]
+    )
     if other_flags:
         logging.warning(
             "Some ID3v2 flags in the ID3v2 header were not cleared "
@@ -111,6 +109,7 @@ def get_id3v2_info(data: bytes):
         unsynchronisation=unsynchronisation,
         extended_header=extended_header,
         experimental=experimental,
+        other_flags=other_flags,
         tag_size=tag_size,
     )
 
