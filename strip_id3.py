@@ -123,7 +123,7 @@ def check_id3v1(fp: BinaryIO):
 
 def strip_id3(in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFER_SIZE):
     try:
-        id3v2_info = read_id3v2_header(in_fp)
+        id3v2_header = read_id3v2_header(in_fp)
     except ID3v2HeaderError as err:
         has_id3v2 = False
         logging.debug(f"Error while searching for ID3v2 header: {err}")
@@ -133,18 +133,19 @@ def strip_id3(in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFE
     if has_id3v2:
         logging.info(
             f"Found and read a complete ID3v2 header (version 2."
-            f"{id3v2_info.major_version}.{id3v2_info.revision})."
+            f"{id3v2_header.major_version}.{id3v2_header.revision})."
         )
-        logging.debug(f"ID3v2 header information: {repr(id3v2_info)}")
-        if id3v2_info.major_version not in SUPPORTED_VERSIONS:
+        logging.debug(f"ID3v2 header information: {repr(id3v2_header)}")
+        if id3v2_header.major_version not in SUPPORTED_VERSIONS:
             versions = "/".join(str(i) for i in SUPPORTED_VERSIONS)
             raise ValueError(
                 f"Only ID3v2.[{versions}].0 tags are currently supported "
-                f"(got ID3v2.{id3v2_info.major_version}.{id3v2_info.revision}"
+                f"(got ID3v2.{id3v2_header.major_version}."
+                f"{id3v2_header.revision}"
             )
-        in_fp.seek(id3v2_info.tag_size, 1)
+        in_fp.seek(id3v2_header.tag_size, 1)
         start_offset = in_fp.tell()
-        assert start_offset == (id3v2_info.tag_size + ID3v2_HEADER_LENGTH)
+        assert start_offset == (id3v2_header.tag_size + ID3v2_HEADER_LENGTH)
     else:
         logging.info("Could not find a valid ID3v2 header.")
         start_offset = 0
