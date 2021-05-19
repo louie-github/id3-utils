@@ -126,7 +126,7 @@ def strip_id3(in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFE
         id3v2_info = read_id3v2_header(in_fp)
     except ID3v2HeaderError as err:
         has_id3v2 = False
-        logging.debug(f"Error when searching for ID3v2 header: {err}")
+        logging.debug(f"Error while searching for ID3v2 header: {err}")
     else:
         has_id3v2 = True
 
