@@ -48,8 +48,8 @@ class ID3v2HeaderError(ValueError):
     pass
 
 
-def read_id3v2_header(data: bytes):
-    fp = io.BytesIO(data)
+def read_id3v2_header(fp: BinaryIO):
+    old_position = fp.tell()
     fp.seek(0)
 
     identifier = fp.read(len(ID3v2_IDENTIFIER))
@@ -100,6 +100,7 @@ def read_id3v2_header(data: bytes):
     # Account for final bit shift
     tag_size >>= 7
 
+    fp.seek(old_position)
     return ID3v2Header(
         major_version=major_version,
         revision=revision,
@@ -121,9 +122,8 @@ def check_id3v1(fp: BinaryIO):
 
 
 def strip_id3(in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFER_SIZE):
-    id3v2_header = in_fp.read(ID3v2_HEADER_LENGTH)
     try:
-        id3v2_info = read_id3v2_header(id3v2_header)
+        id3v2_info = read_id3v2_header(in_fp)
     except ID3v2HeaderError as err:
         has_id3v2 = False
         logging.debug(f"Error when searching for ID3v2 header: {err}")
