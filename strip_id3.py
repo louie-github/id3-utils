@@ -26,6 +26,10 @@ ID3v2_HEADER_LENGTH = (
 )
 assert ID3v2_HEADER_LENGTH == 10
 
+# This script can currently only remove ID3v2.3.0 tags.
+# I think the code can work with 2.4.0 too, but I'm not sure.
+SUPPORTED_VERSIONS = [3]
+
 
 class ID3v2Header(NamedTuple):
     major_version: int
@@ -35,11 +39,6 @@ class ID3v2Header(NamedTuple):
     experimental: bool
     other_flags: Tuple[int, ...]
     tag_size: int
-
-
-# This script can currently only remove ID3v2.3.0 tags.
-# I think the code can work with 2.4.0 too, but I'm not sure.
-SUPPORTED_VERSIONS = [3]
 
 
 class ID3v2HeaderError(ValueError):
