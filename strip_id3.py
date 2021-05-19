@@ -144,7 +144,7 @@ def strip_id3(in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFE
                 f"(got ID3v2.{id3v2_header.major_version}."
                 f"{id3v2_header.revision}"
             )
-        in_fp.seek(id3v2_header.tag_size, 1)
+        in_fp.seek(id3v2_header.tag_size + ID3v2_HEADER_LENGTH)
         start_offset = in_fp.tell()
         assert start_offset == (id3v2_header.tag_size + ID3v2_HEADER_LENGTH)
     else:
