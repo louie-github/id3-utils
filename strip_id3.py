@@ -4,6 +4,7 @@
 import argparse
 import io
 import logging
+import os
 
 from pathlib import Path
 from typing import BinaryIO, NamedTuple, Tuple
@@ -114,7 +115,7 @@ def read_id3v2_header(fp: BinaryIO):
 
 def check_id3v1(fp: BinaryIO):
     old_position = fp.tell()
-    fp.seek(-ID3v1_LENGTH, 2)
+    fp.seek(-ID3v1_LENGTH, os.SEEK_END)
     offset = fp.tell()
     id3v1_identifier = fp.read(3)
     fp.seek(old_position)
