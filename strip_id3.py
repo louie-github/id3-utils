@@ -115,8 +115,7 @@ def read_id3v2_header(fp: BinaryIO):
 
 def check_id3v1(fp: BinaryIO):
     old_position = fp.tell()
-    fp.seek(-ID3v1_LENGTH, os.SEEK_END)
-    offset = fp.tell()
+    offset = fp.seek(-ID3v1_LENGTH, os.SEEK_END)
     id3v1_identifier = fp.read(3)
     fp.seek(old_position)
     return (id3v1_identifier == ID3v1_IDENTIFIER, offset)
@@ -144,8 +143,7 @@ def strip_id3(in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFE
                 f"(got ID3v2.{id3v2_header.major_version}."
                 f"{id3v2_header.revision}"
             )
-        in_fp.seek(id3v2_header.tag_size + ID3v2_HEADER_LENGTH)
-        start_offset = in_fp.tell()
+        start_offset = in_fp.seek(id3v2_header.tag_size + ID3v2_HEADER_LENGTH)
         assert start_offset == (id3v2_header.tag_size + ID3v2_HEADER_LENGTH)
     else:
         logging.info("Could not find a valid ID3v2 header.")
