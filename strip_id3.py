@@ -5,6 +5,7 @@ import argparse
 import io
 import logging
 import os
+import shlex
 
 from pathlib import Path
 from typing import BinaryIO, NamedTuple, Tuple
@@ -139,17 +140,17 @@ def strip_id3(in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFE
         if id3v2_header.major_version not in SUPPORTED_VERSIONS:
             versions = "/".join(str(i) for i in SUPPORTED_VERSIONS)
             raise ValueError(
-                f"Only ID3v2.[{versions}].0 tags are currently supported "
-                f"(got ID3v2.{id3v2_header.major_version}."
+                f"Only ID3v2.[{versions}].0 tags are currently "
+                f"supported (got ID3v2.{id3v2_header.major_version}."
                 f"{id3v2_header.revision}"
             )
-        start_offset = in_fp.seek(id3v2_header.tag_size + ID3v2_HEADER_LENGTH)
-        assert start_offset == (id3v2_header.tag_size + ID3v2_HEADER_LENGTH)
+        start_position = in_fp.seek(id3v2_header.tag_size + ID3v2_HEADER_LENGTH)
+        assert start_position == (id3v2_header.tag_size + ID3v2_HEADER_LENGTH)
     else:
         logging.info("Could not find a valid ID3v2 header.")
-        start_offset = 0
+        start_position = 0
 
-    has_id3v1, end_offset = check_id3v1(in_fp)
+    has_id3v1, end_position = check_id3v1(in_fp)
     if has_id3v1:
         logging.info("Found ID3v1 tag data.")
     else:
@@ -162,11 +163,12 @@ def strip_id3(in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFE
     if has_id3v1:
         logging.debug(
             "Reading input file and writing to output file starting at "
-            f"offset {start_offset:_} bytes until {end_offset:_} bytes."
+            f"offset {start_position:_} bytes until {end_position:_} "
+            "bytes."
         )
         # Write from start_offset until end_offset
-        in_fp.seek(start_offset)
-        bytes_to_write = end_offset - start_offset
+        in_fp.seek(start_position)
+        bytes_to_write = end_position - start_position
         buffer_cycles, last_bufsize = divmod(bytes_to_write, bufsize)
         cycles = 0
         bytes_written = 0
@@ -178,11 +180,11 @@ def strip_id3(in_fp: BinaryIO, out_fp: BinaryIO, bufsize: int = io.DEFAULT_BUFFE
     else:
         logging.debug(
             "Reading input file and writing to output file starting "
-            f"at offset {start_offset} bytes until the end of the "
+            f"at position {start_position} bytes until the end of the "
             "file."
         )
         # Write from start_offset until end of file
-        in_fp.seek(start_offset)
+        in_fp.seek(start_position)
         buffer = in_fp.read(bufsize)
         bytes_written = 0
         while buffer:
@@ -261,8 +263,9 @@ def main(args=None):
             level=logging.INFO, format="[{levelname}] {message}", style="{"
         )
 
+    quote = shlex.quote
     in_path = Path(parsed_args.input_file)
-    logging.info(f"Input file: {in_path}")
+    logging.info(f"Input file: {quote(str(in_path))}")
     out_path = parsed_args.output_file
     if out_path is None:
         logging.warning(
@@ -272,21 +275,22 @@ def main(args=None):
         out_path = in_path.parent / f"[STRIPPED] {in_path.name}"
     else:
         out_path = Path(out_path)
-    logging.info(f"Output file: {out_path}")
+    logging.info(f"Output file: {quote(str(out_path))}")
     if out_path.exists():
         if parsed_args.overwrite:
             logging.info(
-                f"Overwriting output file {repr(out_path)} without "
-                'user confirmation. ("--overwrite" was specified)'
+                f"Overwriting output file {quote(str(out_path))} "
+                'without user confirmation. ("--overwrite" was '
+                "specified)"
             )
         else:
-            print(f"Output file already exists: {out_path}")
+            print(f"Output file already exists: {quote(str(out_path))}")
             user_confirmation = _get_user_confirmation(
                 "Do you want to overwrite the file?", default=False
             )
             if user_confirmation:
                 logging.info(
-                    f"Overwriting output file {repr(out_path)} "
+                    f"Overwriting output file {quote(str(out_path))} "
                     "after user confirmation."
                 )
             else:
